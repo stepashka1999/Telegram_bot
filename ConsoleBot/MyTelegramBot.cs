@@ -1,52 +1,44 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
-using System.Net;
-using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 
 namespace ConsoleBot
 {
-    class Program
+    class MyTelegramBot
     {
-        static MyTelegramBot bot;
+        string token;
+        string defaultDonwloadPath;
+        string start = "Приветствую тебя! \n Я могу:\n- архивировать отправленные тобой файлы \n- делать фото черно-белыми \n- искать для тебя музыку по названию";
 
-        static string DefaultDownloadPath = "D://TGBot_Downloads//";
-        static string token = "1070622790:AAHB5PT4dFq3_BhMArCTBuaeMP3H1eu6cqk";
+        TelegramBotClient bot;
 
-        static void Main()
+        public MyTelegramBot(string token, string downloadPath)
         {
-            //var proxy = new WebProxy
-            //{
-            //    Address = new Uri($"http://192.176.54.209:3128"),
-            //    UseDefaultCredentials = false
-            //};
+            this.token = token;
+            defaultDonwloadPath = downloadPath;
 
-            //var httpClientHandler = new HttpClientHandler { Proxy = proxy };
-
-            //HttpClient hc = new HttpClient(httpClientHandler);
-
-            bot = new MyTelegramBot(token, DefaultDownloadPath);
-
-            bot.Start();
-            
-            Console.ReadKey();
-
-            bot.Stop();
+            bot = new TelegramBotClient(token);
+            SetToDefault();
+            SubscribeOnButtonEvents();
         }
 
-        /*
+        public void Start()
+        {
+            bot.StartReceiving();
+        }
+        public void Stop()
+        {
+            bot.StopReceiving();
+        }
 
         /// <summary>
         /// Подписывает дефлотный обработчик события получения сообщения ботом
         /// </summary>
-        private static void SetToDefault()
-        { 
+        private void SetToDefault()
+        {
             bot.OnMessage += MessageListener;
         }
 
@@ -55,19 +47,17 @@ namespace ConsoleBot
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private static async void MessageListener(object sender, Telegram.Bot.Args.MessageEventArgs e)
+        private async void MessageListener(object sender, Telegram.Bot.Args.MessageEventArgs e)
         {
             var message = e.Message;
-            var chatId = e.Message.Chat.Id;
-            
-            await StartOfDefault(message);
 
+            await StartOfDefault(message);
         }
 
         /// <summary>
         /// Подписывет режим архивации на событие получения сообщения ботом и отписывает дефолтный обработчик
         /// </summary>
-        private static async void SetToArhivateMode()
+        private async void SetToArhivateMode()
         {
             bot.OnMessage -= MessageListener;
             bot.OnMessage += ArhivationMode;
@@ -76,7 +66,7 @@ namespace ConsoleBot
         /// <summary>
         /// Подписывает режим обработки фотографии на событие получения сообщени ботом и отписывает дефолтный обработчик
         /// </summary>
-        private static async void SetToImageMode()
+        private async void SetToImageMode()
         {
             bot.OnMessage -= MessageListener;
             bot.OnMessage += ImageMode;
@@ -87,11 +77,9 @@ namespace ConsoleBot
         /// </summary>
         /// <param name="chatId">ID чата</param>
         /// <returns></returns>
-        private static async Task ShowFuncButton(long chatId)
+        private async Task ShowFuncButton(long chatId)
         {
-            await SubscribeOnButtonEvents();
-
-            var keyboard = new Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup( new[]
+            var keyboard = new Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup(new[]
             {
                 new[]{ Telegram.Bot.Types.ReplyMarkups.InlineKeyboardButton.WithCallbackData("Заархивировать") },
                 new[]{ Telegram.Bot.Types.ReplyMarkups.InlineKeyboardButton.WithCallbackData("Сделать фото черно-белым") },
@@ -104,7 +92,7 @@ namespace ConsoleBot
         /// Создает обработчик события нажатия на кнопки
         /// </summary>
         /// <returns></returns>
-        private static async Task SubscribeOnButtonEvents()
+        private void SubscribeOnButtonEvents()
         {
             bot.OnCallbackQuery += async (object sc, Telegram.Bot.Args.CallbackQueryEventArgs ev) =>
             {
@@ -112,11 +100,13 @@ namespace ConsoleBot
                 var chatID = message.Chat.Id;
                 if (ev.CallbackQuery.Data == "Заархивировать")
                 {
+                    await bot.DeleteMessageAsync(chatID, message.MessageId);
                     await bot.SendTextMessageAsync(chatID, "Пришли мне файл, который я должен заархивировать)");
                     SetToArhivateMode();
                 }
                 else if (ev.CallbackQuery.Data == "Сделать фото черно-белым")
                 {
+                    await bot.DeleteMessageAsync(chatID, message.MessageId);
                     await bot.SendTextMessageAsync(chatID, "Пришли мне фото, которое я должен сделать черно-белым)");
                     SetToImageMode();
                 }
@@ -128,7 +118,7 @@ namespace ConsoleBot
         /// </summary>
         /// <param name="message"></param>
         /// <returns></returns>
-        private static async Task StartOfDefault(Telegram.Bot.Types.Message message)
+        private async Task StartOfDefault(Telegram.Bot.Types.Message message)
         {
             var chatId = message.Chat.Id;
 
@@ -154,7 +144,7 @@ namespace ConsoleBot
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private static async void ImageMode(object sender, Telegram.Bot.Args.MessageEventArgs e)
+        private async void ImageMode(object sender, Telegram.Bot.Args.MessageEventArgs e)
         {
             var message = e.Message;
             var chatId = message.Chat.Id;
@@ -168,34 +158,22 @@ namespace ConsoleBot
                 return;
             }
 
-            var bgnPath = DefaultDownloadPath + "Begin" + chatId+".jpg";
-            var endPath = DefaultDownloadPath + "End" + chatId + ".jpg";
+            var bgnPath = defaultDonwloadPath + "Begin" + chatId + ".jpg";
+            var endPath = defaultDonwloadPath + "End" + chatId + ".jpg";
 
             var fileId = message.Photo[message.Photo.Length - 1].FileId;
 
             await Download(fileId, bgnPath);
 
-            Image bmp;
-
-            using (FileStream fs = new FileStream(bgnPath, FileMode.Open))
-            {
-                bmp = Image.FromStream(fs);
-                fs.Dispose();
-            }
-
-            await Delete(bgnPath);
-
+            Image bmp = await LoadImage(bgnPath);
+            
             bmp = await ToGray((Bitmap)bmp);
 
+            await SaveImage((Bitmap)bmp, endPath);
 
-            using(FileStream fs = new FileStream(endPath, FileMode.Create))
-            {
-                bmp.Save(fs, System.Drawing.Imaging.ImageFormat.Jpeg);
-                fs.Dispose();
-            }
-          
             await SendPhoto(endPath, chatId);
 
+            await Delete(bgnPath);
             await Delete(endPath);
 
             bot.OnMessage -= ImageMode;
@@ -211,7 +189,7 @@ namespace ConsoleBot
         /// </summary>
         /// <param name="bmp">Изображение</param>
         /// <returns></returns>
-        private static async Task<Bitmap> ToGray(Bitmap bmp)
+        private async Task<Bitmap> ToGray(Bitmap bmp)
         {
             for (int row = 0; row < bmp.Width; row++)
             {
@@ -231,11 +209,11 @@ namespace ConsoleBot
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private static async void ArhivationMode(object sender, Telegram.Bot.Args.MessageEventArgs e)
+        private async void ArhivationMode(object sender, Telegram.Bot.Args.MessageEventArgs e)
         {
-            var chatId = e.Message.Chat.Id;
-            
-            if(e.Message.Type != Telegram.Bot.Types.Enums.MessageType.Document)
+            var chatId = e.Message.Chat.Id;              
+
+            if (e.Message.Type != Telegram.Bot.Types.Enums.MessageType.Document)
             {
                 await bot.SendTextMessageAsync(chatId, "К сожалению,  я могу архивировать только документы(((\n Попробуй еще раз!");
                 bot.OnMessage -= ArhivationMode;
@@ -247,13 +225,13 @@ namespace ConsoleBot
             var path = e.Message.Document.FileName;
             var fileId = e.Message.Document.FileId;
 
-            var filePath = DefaultDownloadPath + path;
+            var filePath = defaultDonwloadPath + path;
             var endPath = filePath + ".zip";
 
             await Download(fileId, filePath);
 
             await Arhivate(filePath, endPath);
-            
+
             await SendDocument(endPath, chatId);
 
             await Delete(filePath);
@@ -272,7 +250,7 @@ namespace ConsoleBot
         /// <param name="path">Путь к файлу для архивации</param>
         /// <param name="endPath">Путь для сохранения архивированного файла</param>
         /// <returns></returns>
-        private static async Task Arhivate(string path, string endPath)
+        private async Task Arhivate(string path, string endPath)
         {
             using (FileStream sourceStream = new FileStream(path, FileMode.OpenOrCreate))
             {
@@ -286,7 +264,7 @@ namespace ConsoleBot
                     }
                 }
             }
-        }               
+        }
 
         /// <summary>
         /// Отправка фото пользователю
@@ -294,7 +272,7 @@ namespace ConsoleBot
         /// <param name="path">Путь к файлу</param>
         /// <param name="chatId">ID чата</param>
         /// <returns></returns>
-        private static async Task SendPhoto(string path, long chatId)
+        private async Task SendPhoto(string path, long chatId)
         {
             using (FileStream fs = new FileStream(path, FileMode.Open))
             {
@@ -310,7 +288,7 @@ namespace ConsoleBot
         /// <param name="path">Путь к документу</param>
         /// <param name="chatId">ID чата</param>
         /// <returns></returns>
-        private static async Task SendDocument(string path, long chatId)
+        private async Task SendDocument(string path, long chatId)
         {
             using (FileStream fs = new FileStream(path, FileMode.Open))
             {
@@ -326,10 +304,10 @@ namespace ConsoleBot
         /// <param name="fileId">id файла</param>
         /// <param name="path">путь для сохранения</param>
         /// <returns></returns>
-        private static async Task Download(string fileId, string path)
+        private async Task Download(string fileId, string path)
         {
             var file = await bot.GetFileAsync(fileId);
-            
+
             using (FileStream fs = new FileStream(path, FileMode.Create))
             {
                 await bot.DownloadFileAsync(file.FilePath, fs);
@@ -342,12 +320,41 @@ namespace ConsoleBot
         /// </summary>
         /// <param name="path">Путьк  файлу для удаления</param>
         /// <returns></returns>
-        private static async Task Delete(string path)
+        private async Task Delete(string path)
         {
             File.Delete(path);
         }
 
-    */
+        /// <summary>
+        /// Сохраняет изображение
+        /// </summary>
+        /// <param name="bpm">Изображение</param>
+        /// <param name="path">Путь для сохранения</param>
+        /// <returns></returns>
+        private async Task SaveImage(Bitmap bmp, string path)
+        {
+            using (FileStream fs = new FileStream(path, FileMode.Create))
+            {
+                bmp.Save(fs, System.Drawing.Imaging.ImageFormat.Jpeg);
+                fs.Dispose();
+            }
+        }
 
+        /// <summary>
+        /// Загружает изображени из файла
+        /// </summary>
+        /// <param name="path">Путь к изображению</param>
+        /// <returns></returns>
+        private async Task<Image> LoadImage(string path)
+        {
+            Image bmp;
+            using (FileStream fs = new FileStream(path, FileMode.Open))
+            {
+                bmp = Image.FromStream(fs);
+                fs.Dispose();
+            }
+
+            return bmp;
+        }
     }
 }
